@@ -5,7 +5,7 @@ module.exports = async (req, res) => {
 
   try {
     const body = req.body;
-    const languageCode = body.languageCode || 'en';
+    const languageCode = body.sessionInfo?.parameters?.language || 'en';
     const topic = body.sessionInfo?.parameters?.topic || 'friendship';
 
     const story = `Once upon a time, in a small village, there was a story about ${topic}, told in ${languageCode}.`;
