@@ -1,7 +1,9 @@
-const fetch = (...args) =>
-  import('node-fetch').then(({ default: fetch }) => fetch(...args));
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'YOUR_GEMINI_API_KEY';
+if (!process.env.GEMINI_API_KEY) {
+  throw new Error('GEMINI_API_KEY environment variable is not set');
+}
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
@@ -10,46 +12,56 @@ module.exports = async (req, res) => {
 
   try {
     const body = req.body;
-    const languageCode = body.sessionInfo?.parameters?.language || 'en';
+
+    // Debug log (for Vercel logs)
+    console.log("Incoming request:", JSON.stringify(body, null, 2));
+
+    const tag = body.fulfillmentInfo?.tag;
+    if (tag !== 'story_generation') {
+      return res.status(400).json({ error: 'Invalid webhook tag' });
+    }
+
+    // Extract parameters from Dialogflow CX
     const topic = body.sessionInfo?.parameters?.topic || 'friendship';
+    const language = body.sessionInfo?.parameters?.language || 'en';
 
-    // Construct the prompt for Gemini
-    const prompt = `You are a storytelling assistant. Create a short, engaging, and age-appropriate story for kids about "${topic}". 
-Make sure the story has a simple moral value and is suitable for primary school students. 
-Respond in language: ${languageCode}.`;
+    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
-    // Call Gemini API
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      }
-    );
+    const prompt = `Generate a short, simple, engaging story suitable for young children on the topic of "${topic}". The story should be in ${language} language and must convey a positive value or lesson.`;
 
-    const geminiData = await geminiResponse.json();
-    const story =
-      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      'Sorry, I could not generate a story at this moment.';
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const storyText = response.text();
 
+    console.log("Generated story:", storyText);
+
+    // Respond to Dialogflow CX
     res.status(200).json({
       fulfillment_response: {
         messages: [
           {
             text: {
-              text: [story],
+              text: [storyText],
             },
           },
         ],
       },
     });
+
   } catch (error) {
     console.error('Webhook error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({
+      fulfillment_response: {
+        messages: [
+          {
+            text: {
+              text: [
+                'Oops! Something went wrong while generating the story. Please try again later.',
+              ],
+            },
+          },
+        ],
+      },
+    });
   }
 };
