@@ -1,8 +1,6 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-if (!process.env.GEMINI_API_KEY) {
-  throw new Error('GEMINI_API_KEY environment variable is not set');
-}
+const MODEL_NAME = "gemini-pro";
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 module.exports = async (req, res) => {
@@ -11,57 +9,36 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const body = req.body;
+    const { sessionInfo = {} } = req.body;
+    const parameters = sessionInfo.parameters || {};
 
-    // Debug log (for Vercel logs)
-    console.log("Incoming request:", JSON.stringify(body, null, 2));
+    const topic = parameters.topic || "friendship";
+    const language = parameters.language || "en";
 
-    const tag = body.fulfillmentInfo?.tag;
-    if (tag !== 'story_generation') {
-      return res.status(400).json({ error: 'Invalid webhook tag' });
-    }
+    const prompt = `
+      Generate a short and meaningful story for children about "${topic}".
+      The story should be written in "${language}" and should be suitable for primary school kids.
+      Make it engaging and culturally relevant if possible.
+    `;
 
-    // Extract parameters from Dialogflow CX
-    const topic = body.sessionInfo?.parameters?.topic || 'friendship';
-    const language = body.sessionInfo?.parameters?.language || 'en';
-
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-
-    const prompt = `Generate a short, simple, engaging story suitable for young children on the topic of "${topic}". The story should be in ${language} language and must convey a positive value or lesson.`;
-
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
     const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const storyText = response.text();
+    const response = result.response;
+    const story = response.text();
 
-    console.log("Generated story:", storyText);
-
-    // Respond to Dialogflow CX
     res.status(200).json({
       fulfillment_response: {
         messages: [
           {
             text: {
-              text: [storyText],
+              text: [story],
             },
           },
         ],
       },
     });
-
   } catch (error) {
-    console.error('Webhook error:', error);
-    res.status(500).json({
-      fulfillment_response: {
-        messages: [
-          {
-            text: {
-              text: [
-                'Oops! Something went wrong while generating the story. Please try again later.',
-              ],
-            },
-          },
-        ],
-      },
-    });
+    console.error("Webhook error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
