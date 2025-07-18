@@ -12,7 +12,7 @@ module.exports = async (req, res) => {
     const topic = body.sessionInfo?.parameters?.topic || 'kindness';
     const languageCode = body.sessionInfo?.parameters?.language || 'en';
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const prompt = `
       Write a short, engaging, and age-appropriate story for primary school children on the topic "${topic}".
